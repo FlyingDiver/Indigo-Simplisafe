@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<Events>
+    <Event id="alarmEvent">
+        <Name>Alarm Event</Name>
+		<ConfigUI>
+            <Field id="ssAccount" type="menu">
+                <Label>Account:</Label>
+            	<List class="indigo.devices" filter="self" />
+                <CallbackMethod>menuChanged</CallbackMethod>            
+            </Field>
+		</ConfigUI>
+    </Event>
+</Events>

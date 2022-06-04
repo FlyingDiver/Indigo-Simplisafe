@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<Devices>
+	<Device type="custom" id="ssAccount">
+        <Name>SimpliSafe Account</Name>
+        <ConfigUI>
+             <Field id="username" type="textfield">
+                <Label>Username:</Label>
+            </Field>
+            <Field id="password" type="textfield" secure="true">
+                <Label>Password:</Label>
+            </Field>
+            <Field id="getSMSCode" type="button">
+                <Label>1. Get an Authentication Cod via SMS:</Label>
+                <Title>Get Code</Title>
+                <CallbackMethod>request_sms</CallbackMethod>
+            </Field>
+             <Field id="authCode" type="textfield">
+                <Label>Authentication Code:</Label>
+            </Field>
+
+            <Field id="getTokens" type="button">
+                <Label>2. Complete Authentication:</Label>
+                <Title> GO </Title>
+                <CallbackMethod>get_tokens</CallbackMethod>
+            </Field>
+
+            <Field id="separator2" type="separator"/>
+
+            <Field id="authStatus" type="textfield" readonly="true">
+                <Label>Authentication Status:</Label>
+            </Field>
+        </ConfigUI>
+    	<UiDisplayStateId>status</UiDisplayStateId>
+	</Device>
+</Devices>
