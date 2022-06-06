@@ -1,8 +1,4 @@
 <?xml version="1.0"?>
 <MenuItems>
-    <MenuItem id="menu1">
-        <Name>Write Device Data to Log</Name>
-        <CallbackMethod>menu_dump_devices</CallbackMethod>
-    </MenuItem>
 </MenuItems>
 

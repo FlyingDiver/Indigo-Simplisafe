@@ -3,25 +3,28 @@
 	<Device type="custom" id="ssAccount">
         <Name>SimpliSafe Account</Name>
         <ConfigUI>
-             <Field id="username" type="textfield">
+            <Field id="refreshToken" type="textfield"  hidden="false">
+                <Label>refreshToken:</Label>
+            </Field>
+            <Field id="username" type="textfield">
                 <Label>Username:</Label>
             </Field>
             <Field id="password" type="textfield" secure="true">
                 <Label>Password:</Label>
             </Field>
-            <Field id="getSMSCode" type="button">
-                <Label>1. Get an Authentication Cod via SMS:</Label>
+            <Field id="requestAuth" type="button">
+                <Label>1. Request Authentication:</Label>
                 <Title>Get Code</Title>
-                <CallbackMethod>request_sms</CallbackMethod>
+                <CallbackMethod>request_auth</CallbackMethod>
             </Field>
              <Field id="authCode" type="textfield">
                 <Label>Authentication Code:</Label>
             </Field>
 
-            <Field id="getTokens" type="button">
+            <Field id="verifySMS" type="button">
                 <Label>2. Complete Authentication:</Label>
                 <Title> GO </Title>
-                <CallbackMethod>get_tokens</CallbackMethod>
+                <CallbackMethod>verify_sms</CallbackMethod>
             </Field>
 
             <Field id="separator2" type="separator"/>
