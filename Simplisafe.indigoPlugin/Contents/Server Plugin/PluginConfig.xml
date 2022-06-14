@@ -1,6 +1,33 @@
 <?xml version="1.0"?>
 <PluginConfig>
 	<SupportURL>https://github.com/FlyingDiver/indigo-simplisafe/issues</SupportURL>
+	<Field id="refresh_token" type="textfield"  hidden="false">
+		<Label>refresh_token:</Label>
+	</Field>
+	<Field id="username" type="textfield">
+		<Label>Username:</Label>
+	</Field>
+	<Field id="password" type="textfield" secure="true">
+		<Label>Password:</Label>
+	</Field>
+	<Field id="requestAuth" type="button">
+		<Label>1. Request Authentication:</Label>
+		<Title>Get Code</Title>
+		<CallbackMethod>request_auth</CallbackMethod>
+	</Field>
+	 <Field id="auth_code" type="textfield">
+		<Label>Authentication Code:</Label>
+	</Field>
+	<Field id="verifySMS" type="button">
+		<Label>2. Complete Authentication:</Label>
+		<Title> Verify </Title>
+		<CallbackMethod>verify_sms</CallbackMethod>
+	</Field>
+	<Field id="separator2" type="separator"/>
+	<Field id="authStatus" type="textfield" readonly="true">
+		<Label>Authentication Status:</Label>
+	</Field>
+	<Field id="separator3" type="separator"/>
 	<Field id="logLevel" type="menu" defaultValue="20">
 		<Label>Event Logging Level:</Label>
 		<List>

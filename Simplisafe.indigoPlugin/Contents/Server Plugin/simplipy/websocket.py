@@ -127,10 +127,7 @@ class Watchdog:
 
     def trigger(self) -> None:
         """Trigger the watchdog."""
-        LOGGER.info(
-            "Websocket watchdog triggered – sleeping for %s seconds",
-            self._timeout_seconds,
-        )
+        LOGGER.info(f"Websocket watchdog triggered – sleeping for {self._timeout_seconds} seconds")
 
         if self._timer_task:
             self._timer_task.cancel()
