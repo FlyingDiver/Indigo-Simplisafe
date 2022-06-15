@@ -128,3 +128,5 @@ dmypy.json
 Simplisafe.indigoPlugin/.idea/
 
 Simplisafe.indigoPlugin/Contents/Server Plugin/token_file
+
+.idea/

@@ -67,23 +67,23 @@ class Plugin(indigo.PluginBase):
     def runConcurrentThread(self):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
+        self.loop.create_task(self.async_shutdown())
         self.loop.run_until_complete(self.async_main())
 
     def request_auth(self, valuesDict):
         self.logger.threaddebug(f"request_auth valuesDict = {valuesDict}")
         self.loop.create_task(self._async_request_auth())
-
         return valuesDict
+
+    async def _async_request_auth(self):
+        self.logger.debug(f"_async_request_auth")
+        self.start_request_auth_event.set()
 
     def verify_sms(self, valuesDict):
         self.logger.threaddebug(f"verify_sms valuesDict = {valuesDict}")
         self.sms_code = valuesDict['auth_code']
         self.loop.create_task(self._async_verify_sms(self.sms_code))
         return valuesDict
-
-    async def _async_request_auth(self):
-        self.logger.debug(f"_async_request_auth")
-        self.start_request_auth_event.set()
 
     async def _async_verify_sms(self, sms_code):
         self.logger.debug(f"_async_verify_sms sms_code = {sms_code}")
@@ -99,9 +99,6 @@ class Plugin(indigo.PluginBase):
                 break
 
     async def async_main(self):
-        self.logger.debug(f"async_main start")
-        asyncio.create_task(self.async_shutdown())
-
         """Create the aiohttp session and run."""
         async with ClientSession() as session:
 
