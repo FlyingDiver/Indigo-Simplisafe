@@ -4,7 +4,10 @@
 import indigo
 import logging
 import json
+import threading
 import asyncio
+
+import simplipy.api
 from aiohttp import ClientSession
 
 from SimpliSafe import SimpliSafe
@@ -34,10 +37,14 @@ class Plugin(indigo.PluginBase):
         self.username = pluginPrefs.get("username", None)
         self.password = pluginPrefs.get("password", None)
         self.triggers = []
-        self.loop = None
+        self._event_loop = None
+        self._async_thread = None
+        self._api = None
+        self._session = None
         self.sms_code = None
-        self.start_request_auth_event = asyncio.Event()
-        self.start_verify_sms_event = asyncio.Event()
+        self.auth_wait_event = asyncio.Event()
+        self.auth_complete_event = asyncio.Event()
+        self.simplisafe = None
 
     def validatePrefsConfigUi(self, valuesDict):
 
@@ -64,84 +71,169 @@ class Plugin(indigo.PluginBase):
             self.plugin_file_handler.setLevel(self.logLevel)
             self.logger.debug(f"LogLevel = {self.logLevel}")
 
-    def runConcurrentThread(self):
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
-        self.loop.create_task(self.async_shutdown())
-        self.loop.run_until_complete(self.async_main())
+    def startup(self):
+        self.logger.info(f"SimpliSafe starting")
+
+        # async thread is used instead of concurrent thread
+        self._event_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self._event_loop)
+        self._async_thread = threading.Thread(target=self._run_async_thread)
+        self._async_thread.start()
+
+    def shutdown(self):  # noqa
+        self.logger.info(f"SimpliSafe stopping")
+
+    def _run_async_thread(self):
+        self.logger.debug("_run_async_thread starting")
+        self._event_loop.create_task(self.async_main())
+        self._event_loop.run_until_complete(self._async_stop())
+        self._event_loop.close()
+
+    async def _async_stop(self):
+        self.logger.debug("_async_stop waiting")
+        while True:
+            await asyncio.sleep(1.0)
+            if self.stopThread:
+                self.logger.debug("_async_stop: stopping")
+                self.auth_wait_event.set()
+                break
 
     def request_auth(self, valuesDict):
         self.logger.threaddebug(f"request_auth valuesDict = {valuesDict}")
-        self.loop.create_task(self._async_request_auth())
+        self._event_loop.create_task(self._async_auth_wait_continue())
         return valuesDict
-
-    async def _async_request_auth(self):
-        self.logger.debug(f"_async_request_auth")
-        self.start_request_auth_event.set()
 
     def verify_sms(self, valuesDict):
         self.logger.threaddebug(f"verify_sms valuesDict = {valuesDict}")
         self.sms_code = valuesDict['auth_code']
-        self.loop.create_task(self._async_verify_sms(self.sms_code))
+        self._event_loop.create_task(self._async_auth_wait_continue())
         return valuesDict
 
-    async def _async_verify_sms(self, sms_code):
-        self.logger.debug(f"_async_verify_sms sms_code = {sms_code}")
-        self.start_verify_sms_event.set()
+    async def _async_auth_wait_continue(self):
+        self.logger.debug(f"_async_auth_wait_continue")
+        self.auth_wait_event.set()
 
-    async def async_shutdown(self):
-        while True:
-            await asyncio.sleep(1.0)
-            if self.stopThread:
-                self.logger.debug("async_shutdown: shutdown()")
-                self.start_request_auth_event.set()
-                self.start_verify_sms_event.set()
-                break
+    # Use refresh token to authenticate with SimpliSafe
+    async def _authenticate(self):
+        self.logger.debug(f"_authenticate with token '{self.refresh_token}'")
+        if self.refresh_token:
+            try:
+                self._api = await API.async_from_refresh_token(self.refresh_token, session=self._session)
+            except InvalidCredentialsError as err:
+                self.logger.warning(f"_authenticate: Error refreshing auth token: {err}")
+            except Exception as err:
+                self.logger.warning(f"_authenticate: Error refreshing auth token: {err}")
+
+        if self._api and self._api.auth_state == simplipy.api.AuthStates.AUTHENTICATED:
+            self.auth_complete_event.set()
+        else:
+            # no token or refresh did not work, start the auth flow
+            self._event_loop.create_task(self._auth_flow_1())
+
+    # wait for Event from Config dialog to start auth process
+    async def _auth_flow_1(self):
+        self.logger.debug(f"_auth_flow_1")
+        self.logger.warning("SimpliSafe plugin not authenticated - open plugin Configure dialog")
+        if await self.auth_wait_event.wait():
+            self.logger.debug(f"_auth_flow_1 auth_wait_event set")
+            # user presses the button, so go to next step
+            self.auth_wait_event.clear()
+            self._event_loop.create_task(self._auth_flow_2())
+        else:
+            self.logger.debug(f"_auth_flow_1 auth_wait_event timeout")
+            self._event_loop.create_task(self._auth_flow_1())
+
+    # Attempt to use username and password to authenticate with SimpliSafe
+    async def _auth_flow_2(self):
+        self.logger.debug(f"_auth_flow_2")
+        if not self.username or not self.password:
+            self.logger.error("SimpliSafe plugin not authenticated - username or password not set")
+            self._event_loop.create_task(self._auth_flow_1())
+            return
+
+        try:
+            self._api = await API.async_from_credentials(self.username, self.password, session=self._session)
+        except InvalidCredentialsError as err:
+            self.logger.warning(f"Error requesting auth from credentials: {err}")
+        except Exception as err:
+            self.logger.warning(f"Error requesting auth from credentials: {err}")
+
+        self.logger.debug(f"async_from_credentials Auth State: {self._api.auth_state}")
+
+        if self._api and self._api.auth_state == simplipy.api.AuthStates.PENDING_2FA_SMS:
+            self._event_loop.create_task(self._auth_flow_3())
+        elif self._api and self._api.auth_state == simplipy.api.AuthStates.PENDING_2FA_EMAIL:
+            self.logger.warning("SimpliSafe authentication in progress - verify 2FA email")
+            self._event_loop.create_task(self._auth_flow_4())
+        elif self._api and self._api.auth_state == simplipy.api.AuthStates.AUTHENTICATED:
+            self.auth_complete_event.set()
+
+    # wait for Event from Config dialog to verify SMS code
+    async def _auth_flow_3(self):
+        self.logger.debug(f"_auth_flow_3")
+        self.logger.warning("SimpliSafe authentication in progress - enter SMS code in Configure dialog")
+
+        # wait for flag from Config dialog to verify the sms code
+        if await self.auth_wait_event.wait():
+            # user presses the button, so go to next step
+            self.auth_wait_event.clear()
+            try:
+                await self._api.async_verify_2fa_sms(self.sms_code)
+            except InvalidCredentialsError as err:
+                self.logger.error("Invalid SMS 2FA code")
+
+            if self._api and self._api.auth_state == simplipy.api.AuthStates.AUTHENTICATED:
+                self.auth_complete_event.set()
+                return
+
+        # timed out, or verify failed, do it again
+        self._event_loop.create_task(self._auth_flow_2())
+
+    # wait for user to validate 2FA email
+    async def _auth_flow_4(self):
+        self.logger.debug(f"_auth_flow_4")
+        await asyncio.sleep(3.0)
+        try:
+            await self._api.async_verify_2fa_email()
+        except Verify2FAPending as err:
+            self.logger.warning(f"Verify 2FA email pending: {err}")
+
+        if self._api and self._api.auth_state == simplipy.api.AuthStates.AUTHENTICATED:
+            self.auth_complete_event.set()
+            return
+
+        # timed out, or verify failed, do it again
+        self._event_loop.create_task(self._auth_flow_2())
+
 
     async def async_main(self):
+        self.logger.debug("async_main starting")
+
         """Create the aiohttp session and run."""
-        async with ClientSession() as session:
+        async with ClientSession() as self._session:
 
-            if self.refresh_token:
-                self.logger.debug(f"async_main start with token {self.refresh_token}")
-                try:
-                    api = await API.async_from_refresh_token(self.refresh_token, session=session)
-                except InvalidCredentialsError as err:
-                    self.logger.debug(f"Error refreshing auth from token: {err}")
-                    self.refresh_token = None
+            # Authentication Flow
+            await self._authenticate()
+            self.logger.debug(f"async_main waiting for auth_complete_event")
+            await self.auth_complete_event.wait()
 
-            else:
-                # wait for Event from Config dialog to start auth process
-                self.logger.warning("SimpliSafe plugin not authenticated - open plugin Configure dialog")
-                await self.start_request_auth_event.wait()
-                try:
-                    api = await API.async_from_credentials(self.username, self.password, session=session)
-                except InvalidCredentialsError as err:
-                    self.logger.warning(f"Error requesting auth from credentials: {err}")
-                    self.refresh_token = None
-                self.logger.debug(f"async_from_credentials Auth State: {api.auth_state}")
+            # Authentication complete
 
-                # wait for flag from Config dialog to verify the sms code
-                await self.start_verify_sms_event.wait()
-                try:
-                    await api.async_verify_2fa_sms(self.sms_code)
-                except InvalidCredentialsError as err:
-                    self.logger.error("Invalid SMS 2FA code")
-
-            self.logger.debug(f"Auth State: {api.auth_state}")
-            self.logger.debug(f"user_id = {api.user_id}")
-            self.logger.debug(f"refresh_token = {api.refresh_token}")
-            self.pluginPrefs["refresh_token"] = api.refresh_token
+            self.logger.debug(f"Auth State: {self._api.auth_state}")
+            self.logger.debug(f"user_id = {self._api.user_id}")
+            self.logger.debug(f"refresh_token = {self._api.refresh_token}")
+            self.pluginPrefs["refresh_token"] = self._api.refresh_token
             indigo.server.savePluginPrefs()
 
-            simplisafe = SimpliSafe(api)
+            self._api.websocket.add_event_callback(self.event_handler)
+
+            self.simplisafe = SimpliSafe(self._api)
             try:
                 await simplisafe.async_init()
             except SimplipyError as err:
                 raise ConfigEntryNotReady from err
 
-            systems = await api.async_get_systems()
-            for systemid, system in systems.items():
+            for systemid, system in self.simplisafe.systems.items():
                 self.logger.debug(f"System: {system.system_id}")
                 self.logger.debug(f"\taddress = {system.address}")
                 self.logger.debug(f"\tconnection_type = {system.connection_type}")
@@ -152,15 +244,6 @@ class Plugin(indigo.PluginBase):
                 for serial, sensor in system.sensors.items():
                     self.logger.debug(f"\t\tname = {sensor.name}")
                     self.logger.debug(f"\t\ttype = {sensor.type}")
-
-            api.websocket.add_event_callback(self.event_handler)
-
-            self.logger.debug("async_main: starting idle loop")
-            try:
-                while True:
-                    await asyncio.sleep(1.0)
-            except self.StopThread:
-                self.logger.debug("async_main: stopping")
 
     def event_handler(self, event):
         self.logger.debug(f"Received a SimpliSafe™ event: {event.info}")
@@ -208,3 +291,15 @@ class Plugin(indigo.PluginBase):
     # doesn't do anything, just needed to force other menus to dynamically refresh
     def menuChanged(self, valuesDict=None, typeId=None, devId=None):  # noqa
         return valuesDict
+
+    ########################################
+    # Action handling
+    ########################################
+    def actionSetMode(self, action, systemDevice, callerWaitingForResult):
+        mode = action.props.get("mode", "away")
+        system_id = systemDevice.address
+        self._event_loop.create_task(self._async_set_mode(system_id, mode))
+
+    async def _async_set_mode(self, system_id, mode):
+
+        pass

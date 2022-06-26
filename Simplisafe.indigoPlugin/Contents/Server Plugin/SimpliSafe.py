@@ -43,7 +43,6 @@ class SimpliSafe:
         self._api = api
         self._token_refresh_task: asyncio.Task | None = None
         self._websocket_reconnect_task: asyncio.Task | None = None
-        self.initial_event_to_use: dict[int, dict[str, Any]] = {}
         self.subscription_data: dict[int, Any] = api.subscription_data
         self.systems: dict[int, SystemType] = {}
 
@@ -95,6 +94,7 @@ class SimpliSafe:
     async def async_update(self) -> None:
         """Get updated data from SimpliSafe."""
         self.logger.debug("async_update")
+        self.systems = await self._api.async_get_systems()
 
         async def async_update_system(system: SystemType) -> None:
             """Update a system."""
@@ -127,27 +127,13 @@ class SimpliSafe:
         # Save the refresh token we got on entry setup:
         await async_save_refresh_token(self._api.refresh_token)
 
-        self._api.websocket.add_event_callback(self._async_websocket_on_event)
         self._api.add_refresh_token_callback(async_handle_refresh_token)
-
         self._websocket_reconnect_task = asyncio.create_task(self._async_start_websocket_loop())
 
         # force refresh the auth token, as the library won't do it without consistent API calls
         self._token_refresh_task = asyncio.create_task(self._async_token_refresh_loop())
 
         self.systems = await self._api.async_get_systems()
-        for system in self.systems.values():
-
-            # Future events will come from the websocket, but since subscription to the
-            # websocket doesn't provide the most recent event, we grab it from the REST
-            # API to ensure event-related attributes aren't empty on startup:
-            try:
-                self.initial_event_to_use[
-                    system.system_id
-                ] = await system.async_get_latest_event()
-            except SimplipyError as err:
-                self.logger.error(f"async_init: SimplipyError: {err}")
-                self.initial_event_to_use[system.system_id] = {}
 
 async def main() -> None:
     """Create the aiohttp session and run."""
