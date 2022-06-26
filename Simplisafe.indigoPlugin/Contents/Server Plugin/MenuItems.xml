@@ -1,4 +1,22 @@
 <?xml version="1.0"?>
 <MenuItems>
+    <MenuItem id="authenticate">
+        <Name>Authenticate...</Name>
+        <ConfigUI>
+	        <Field id="requestAuth" type="button">
+		        <Label>1. Request Authentication:</Label>
+		        <Title>Get Code</Title>
+		        <CallbackMethod>request_auth</CallbackMethod>
+	        </Field>
+	        <Field id="auth_code" type="textfield">
+		        <Label>Authentication Code:</Label>
+	        </Field>
+	        <Field id="verifySMS" type="button">
+		        <Label>2. Complete Authentication:</Label>
+		        <Title> Verify </Title>
+		        <CallbackMethod>verify_sms</CallbackMethod>
+	        </Field>
+        </ConfigUI>
+    </MenuItem>
 </MenuItems>
 

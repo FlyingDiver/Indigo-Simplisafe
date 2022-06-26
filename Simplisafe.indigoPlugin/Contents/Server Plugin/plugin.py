@@ -4,6 +4,7 @@
 import indigo
 import logging
 import json
+import time
 import threading
 import asyncio
 
@@ -20,6 +21,42 @@ from simplipy.errors import (
     WebsocketError,
 )
 
+state_strings = {
+    simplipy.system.SystemStates.ALARM: "Alarm",
+    simplipy.system.SystemStates.ALARM_COUNT: "Alarm Count",
+    simplipy.system.SystemStates.AWAY: "Away",
+    simplipy.system.SystemStates.AWAY_COUNT: "Away Count",
+    simplipy.system.SystemStates.ENTRY_DELAY: "Entry Delay",
+    simplipy.system.SystemStates.ERROR: "Error",
+    simplipy.system.SystemStates.EXIT_DELAY: "Exit Delay",
+    simplipy.system.SystemStates.HOME: "Home",
+    simplipy.system.SystemStates.HOME_COUNT: "Home Count",
+    simplipy.system.SystemStates.OFF: "Off",
+    simplipy.system.SystemStates.TEST: "Test",
+    simplipy.system.SystemStates.UNKNOWN: "Unknown",
+}
+
+device_type_strings = {
+    simplipy.system.DeviceTypes.PANIC_BUTTON: "Panic Button",
+    simplipy.system.DeviceTypes.MOTION: "Motion Sensor",
+    simplipy.system.DeviceTypes.ENTRY: "Entry Sensor",
+    simplipy.system.DeviceTypes.GLASS_BREAK: "Glass Break Sensor",
+    simplipy.system.DeviceTypes.CARBON_MONOXIDE: "Carbon Monoxide Sensor",
+    simplipy.system.DeviceTypes.SMOKE: "Smoke Detector",
+    simplipy.system.DeviceTypes.LEAK: "Leak Detector",
+    simplipy.system.DeviceTypes.REMOTE: "Remote",
+    simplipy.system.DeviceTypes.KEYPAD: "Keypad",
+    simplipy.system.DeviceTypes.KEYCHAIN: "Keychain",
+    simplipy.system.DeviceTypes.TEMPERATURE: "Temperature Sensor",
+    simplipy.system.DeviceTypes.CAMERA: "Camera",
+    simplipy.system.DeviceTypes.SIREN: "Siren",
+    simplipy.system.DeviceTypes.DOORBELL: "Doorbell",
+    simplipy.system.DeviceTypes.LOCK: "Lock",
+    simplipy.system.DeviceTypes.OUTDOOR_CAMERA: "Outdoor Camera",
+    simplipy.system.DeviceTypes.LOCK_KEYPAD: "Lock Keypad",
+    simplipy.system.DeviceTypes.UNKNOWN: "Unknown Device",
+}
+
 class Plugin(indigo.PluginBase):
 
     def __init__(self, pluginId, pluginDisplayName, pluginVersion, pluginPrefs):
@@ -33,24 +70,26 @@ class Plugin(indigo.PluginBase):
         self.logger.debug(f"LogLevel = {self.logLevel}")
 
         self.pluginPrefs = pluginPrefs
-        self.refresh_token = pluginPrefs.get("refresh_token", None)
-        self.username = pluginPrefs.get("username", None)
-        self.password = pluginPrefs.get("password", None)
         self.triggers = []
         self._event_loop = None
         self._async_thread = None
         self._api = None
         self._session = None
         self.sms_code = None
-        self.auth_wait_event = asyncio.Event()
         self.auth_complete_event = asyncio.Event()
         self.simplisafe = None
+        self.known_systems = {}
+        self.known_sensors = {}
+        self.active_systems = {}
+        self.active_sensors = {}
+        self.update_needed = False
+        self.updateFrequency = float(self.pluginPrefs.get('updateFrequency', "15")) * 60.0
+        self.logger.debug(f"updateFrequency = {self.updateFrequency}")
+        self.next_update = time.time() + self.updateFrequency
 
     def validatePrefsConfigUi(self, valuesDict):
 
         errorDict = indigo.Dict()
-        if self.refresh_token:
-            valuesDict['refresh_token'] = self.refresh_token    # force in the new one that was obtained asynchronously
         valuesDict['auth_code'] = ""
         username = valuesDict.get('username', None)
         if not username or not len(username):
@@ -60,65 +99,45 @@ class Plugin(indigo.PluginBase):
             errorDict['password'] = "Password is required"
         if len(errorDict) > 0:
             return False, valuesDict, errorDict
-        return True
+        return True, valuesDict
 
     def closedPrefsConfigUi(self, valuesDict, userCancelled):
         if not userCancelled:
-            self.username = valuesDict["username"]
-            self.password = valuesDict["password"]
             self.logLevel = int(valuesDict.get("logLevel", logging.INFO))
             self.indigo_log_handler.setLevel(self.logLevel)
             self.plugin_file_handler.setLevel(self.logLevel)
             self.logger.debug(f"LogLevel = {self.logLevel}")
 
     def startup(self):
-        self.logger.info(f"SimpliSafe starting")
-
-        # async thread is used instead of concurrent thread
         self._event_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._event_loop)
         self._async_thread = threading.Thread(target=self._run_async_thread)
         self._async_thread.start()
 
-    def shutdown(self):  # noqa
-        self.logger.info(f"SimpliSafe stopping")
-
     def _run_async_thread(self):
         self.logger.debug("_run_async_thread starting")
-        self._event_loop.create_task(self.async_main())
-        self._event_loop.run_until_complete(self._async_stop())
+        self._event_loop.run_until_complete(self._async_main())
         self._event_loop.close()
 
-    async def _async_stop(self):
-        self.logger.debug("_async_stop waiting")
-        while True:
-            await asyncio.sleep(1.0)
-            if self.stopThread:
-                self.logger.debug("_async_stop: stopping")
-                self.auth_wait_event.set()
-                break
-
-    def request_auth(self, valuesDict):
-        self.logger.threaddebug(f"request_auth valuesDict = {valuesDict}")
-        self._event_loop.create_task(self._async_auth_wait_continue())
+    def request_auth(self, valuesDict, typeId):
+        self.logger.threaddebug(f"request_auth typeId = {typeId}, valuesDict = {valuesDict}")
+        self._event_loop.create_task(self._authenticate_with_credentials())
         return valuesDict
 
-    def verify_sms(self, valuesDict):
-        self.logger.threaddebug(f"verify_sms valuesDict = {valuesDict}")
+    def verify_sms(self, valuesDict, typeId):
+        self.logger.threaddebug(f"verify_sms typeId = {typeId}, valuesDict = {valuesDict}")
         self.sms_code = valuesDict['auth_code']
-        self._event_loop.create_task(self._async_auth_wait_continue())
+        valuesDict['auth_code'] = ""  # clear the code
+        self._event_loop.create_task(self._auth_verify_sms())
         return valuesDict
-
-    async def _async_auth_wait_continue(self):
-        self.logger.debug(f"_async_auth_wait_continue")
-        self.auth_wait_event.set()
 
     # Use refresh token to authenticate with SimpliSafe
-    async def _authenticate(self):
-        self.logger.debug(f"_authenticate with token '{self.refresh_token}'")
-        if self.refresh_token:
+    async def _authenticate_with_token(self):
+        token = self.pluginPrefs.get("refresh_token", None)
+        self.logger.debug(f"_authenticate with token '{token}'")
+        if token:
             try:
-                self._api = await API.async_from_refresh_token(self.refresh_token, session=self._session)
+                self._api = await API.async_from_refresh_token(token, session=self._session)
             except InvalidCredentialsError as err:
                 self.logger.warning(f"_authenticate: Error refreshing auth token: {err}")
             except Exception as err:
@@ -127,32 +146,14 @@ class Plugin(indigo.PluginBase):
         if self._api and self._api.auth_state == simplipy.api.AuthStates.AUTHENTICATED:
             self.auth_complete_event.set()
         else:
-            # no token or refresh did not work, start the auth flow
-            self._event_loop.create_task(self._auth_flow_1())
+            # no token or refresh did not work, remind user to start the auth flow
+            self.logger.warning("SimpliSafe plugin not authenticated - use plugin menu Authenticate...")
 
-    # wait for Event from Config dialog to start auth process
-    async def _auth_flow_1(self):
-        self.logger.debug(f"_auth_flow_1")
-        self.logger.warning("SimpliSafe plugin not authenticated - open plugin Configure dialog")
-        if await self.auth_wait_event.wait():
-            self.logger.debug(f"_auth_flow_1 auth_wait_event set")
-            # user presses the button, so go to next step
-            self.auth_wait_event.clear()
-            self._event_loop.create_task(self._auth_flow_2())
-        else:
-            self.logger.debug(f"_auth_flow_1 auth_wait_event timeout")
-            self._event_loop.create_task(self._auth_flow_1())
-
-    # Attempt to use username and password to authenticate with SimpliSafe
-    async def _auth_flow_2(self):
-        self.logger.debug(f"_auth_flow_2")
-        if not self.username or not self.password:
-            self.logger.error("SimpliSafe plugin not authenticated - username or password not set")
-            self._event_loop.create_task(self._auth_flow_1())
-            return
-
+    # Use username and password to authenticate with SimpliSafe
+    async def _authenticate_with_credentials(self):
+        self.logger.debug(f"_authenticate_with_credentials")
         try:
-            self._api = await API.async_from_credentials(self.username, self.password, session=self._session)
+            self._api = await API.async_from_credentials(self.pluginPrefs.get("username"), self.pluginPrefs.get("password"), session=self._session)
         except InvalidCredentialsError as err:
             self.logger.warning(f"Error requesting auth from credentials: {err}")
         except Exception as err:
@@ -161,67 +162,58 @@ class Plugin(indigo.PluginBase):
         self.logger.debug(f"async_from_credentials Auth State: {self._api.auth_state}")
 
         if self._api and self._api.auth_state == simplipy.api.AuthStates.PENDING_2FA_SMS:
-            self._event_loop.create_task(self._auth_flow_3())
+            self.logger.warning("SimpliSafe authentication in progress - enter SMS code in plugin menu Authenticate...")
+
         elif self._api and self._api.auth_state == simplipy.api.AuthStates.PENDING_2FA_EMAIL:
             self.logger.warning("SimpliSafe authentication in progress - verify 2FA email")
-            self._event_loop.create_task(self._auth_flow_4())
+            self._event_loop.create_task(self._auth_verify_email())
+
         elif self._api and self._api.auth_state == simplipy.api.AuthStates.AUTHENTICATED:
             self.auth_complete_event.set()
 
     # wait for Event from Config dialog to verify SMS code
-    async def _auth_flow_3(self):
-        self.logger.debug(f"_auth_flow_3")
-        self.logger.warning("SimpliSafe authentication in progress - enter SMS code in Configure dialog")
+    async def _auth_verify_sms(self):
+        self.logger.debug(f"_auth_verify_sms, code = {self.sms_code}")
+        try:
+            await self._api.async_verify_2fa_sms(self.sms_code)
+        except InvalidCredentialsError as err:
+            self.logger.error("Invalid SMS 2FA code")
 
-        # wait for flag from Config dialog to verify the sms code
-        if await self.auth_wait_event.wait():
-            # user presses the button, so go to next step
-            self.auth_wait_event.clear()
-            try:
-                await self._api.async_verify_2fa_sms(self.sms_code)
-            except InvalidCredentialsError as err:
-                self.logger.error("Invalid SMS 2FA code")
-
-            if self._api and self._api.auth_state == simplipy.api.AuthStates.AUTHENTICATED:
-                self.auth_complete_event.set()
-                return
-
-        # timed out, or verify failed, do it again
-        self._event_loop.create_task(self._auth_flow_2())
+        if self._api and self._api.auth_state == simplipy.api.AuthStates.AUTHENTICATED:
+            self.auth_complete_event.set()
+        else:
+            self.logger.warning("SimpliSafe authentication failed - use plugin menu Authenticate...")
 
     # wait for user to validate 2FA email
-    async def _auth_flow_4(self):
-        self.logger.debug(f"_auth_flow_4")
+    async def _auth_verify_email(self):
+        self.logger.debug(f"_auth_verify_email")
         await asyncio.sleep(3.0)
         try:
             await self._api.async_verify_2fa_email()
         except Verify2FAPending as err:
-            self.logger.warning(f"Verify 2FA email pending: {err}")
+            self.logger.warning(f"Verify 2FA email error: {err}")
+            self.logger.warning("SimpliSafe authentication failed - use plugin menu Authenticate...")
 
         if self._api and self._api.auth_state == simplipy.api.AuthStates.AUTHENTICATED:
             self.auth_complete_event.set()
-            return
+        else:
+            # timed out, or verify failed, do it again
+            self._event_loop.create_task(self._auth_verify_email())
 
-        # timed out, or verify failed, do it again
-        self._event_loop.create_task(self._auth_flow_2())
 
-
-    async def async_main(self):
+    async def _async_main(self):
         self.logger.debug("async_main starting")
 
         """Create the aiohttp session and run."""
         async with ClientSession() as self._session:
 
             # Authentication Flow
-            await self._authenticate()
-            self.logger.debug(f"async_main waiting for auth_complete_event")
-            await self.auth_complete_event.wait()
+            await self._authenticate_with_token()
+            while not self._api or self._api.auth_state != simplipy.api.AuthStates.AUTHENTICATED:
+                await asyncio.sleep(1.0)
 
             # Authentication complete
-
-            self.logger.debug(f"Auth State: {self._api.auth_state}")
-            self.logger.debug(f"user_id = {self._api.user_id}")
-            self.logger.debug(f"refresh_token = {self._api.refresh_token}")
+            self.logger.debug(f"new refresh_token = {self._api.refresh_token}")
             self.pluginPrefs["refresh_token"] = self._api.refresh_token
             indigo.server.savePluginPrefs()
 
@@ -229,21 +221,36 @@ class Plugin(indigo.PluginBase):
 
             self.simplisafe = SimpliSafe(self._api)
             try:
-                await simplisafe.async_init()
+                await self.simplisafe.async_init()
             except SimplipyError as err:
                 raise ConfigEntryNotReady from err
 
-            for systemid, system in self.simplisafe.systems.items():
-                self.logger.debug(f"System: {system.system_id}")
-                self.logger.debug(f"\taddress = {system.address}")
-                self.logger.debug(f"\tconnection_type = {system.connection_type}")
-                self.logger.debug(f"\tserial = {system.serial}")
-                self.logger.debug(f"\tversion = {system.version}")
-                self.logger.debug(f"\tstate = {system.state}")
-                self.logger.debug(f"\tsensors:")
-                for serial, sensor in system.sensors.items():
-                    self.logger.debug(f"\t\tname = {sensor.name}")
-                    self.logger.debug(f"\t\ttype = {sensor.type}")
+            for system in self.simplisafe.systems.values():
+                self.known_systems[system.system_id] = system
+                self.known_sensors[system.system_id] = {}
+                for sensor in system.sensors.values():
+                    self.known_sensors[system.system_id][sensor.serial] = sensor
+
+            self.logger.debug(f"known_systems: {self.known_systems}")
+            self.logger.debug(f"known_sensors: {self.known_sensors}")
+            self.logger.debug(f"active_systems: {self.active_systems}")
+            self.logger.debug(f"active_sensors: {self.active_sensors}")
+
+            while True:
+                if (time.time() > self.next_update) or self.update_needed:
+                    self.update_needed = False
+                    self.next_update = time.time() + self.updateFrequency
+                    for device_id in self.active_systems:
+                        device = indigo.devices[device_id]
+                        self.update_system_device(device)
+                    for device_id in self.active_sensors:
+                        device = indigo.devices[device_id]
+                        self.update_sensor_device(device)
+
+                await asyncio.sleep(1.0)
+                if self.stopThread:
+                    self.logger.debug("_async_main: stopping")
+                    break
 
     def event_handler(self, event):
         self.logger.debug(f"Received a SimpliSafe™ event: {event.info}")
@@ -267,12 +274,72 @@ class Plugin(indigo.PluginBase):
 
     def deviceStartComm(self, device):
         self.logger.debug(f"{device.name}: Starting Device")
+        if device.deviceTypeId == "system":
+            self.active_systems[device.id] = device.name
+        elif device.deviceTypeId == "simple_sensor":
+            self.active_sensors[device.id] = device.name
+        self.update_needed = True
+        device.stateListOrDisplayStateIdChanged()
 
     def deviceStopComm(self, device):
         self.logger.debug(f"{device.name}: Stopping Device")
+        if device.deviceTypeId == "system":
+            del self.active_systems[device.id]
+        elif device.deviceTypeId == "sensor":
+            del self.active_sensors[device.id]
 
     def didDeviceCommPropertyChange(self, origDev, newDev):  # noqa
         return False
+
+    def update_system_device(self, device):
+        system = self.known_systems[int(device.address)]
+        self.logger.debug(f"{device.name}: doing update for {system.address}")
+        update_list = [
+            {'key': "system_address", 'value': system.address},
+            {'key': "connection_type", 'value': system.connection_type},
+            {'key': "system_serial", 'value': system.serial},
+            {'key': "system_id", 'value': system.system_id},
+            {'key': "system_version", 'value': system.version},
+            {'key': "system_state", 'value': state_strings[system.state]},
+            {'key': "system_temperature", 'value': system.temperature}
+        ]
+        if system.version == 3:
+            update_list.append({'key': "alarm_duration", 'value': system.alarm_duration})
+            update_list.append({'key': "battery_backup_power_level", 'value': system.battery_backup_power_level})
+            update_list.append({'key': "wall_power_level", 'value': system.wall_power_level})
+            update_list.append({'key': "entry_delay_away", 'value': system.entry_delay_away})
+            update_list.append({'key': "entry_delay_home", 'value': system.entry_delay_home})
+            update_list.append({'key': "exit_delay_away", 'value': system.exit_delay_away})
+            update_list.append({'key': "exit_delay_home", 'value': system.exit_delay_home})
+            update_list.append({'key': "gsm_strength", 'value': system.gsm_strength})
+            update_list.append({'key': "wifi_strength", 'value': system.wifi_strength})
+            update_list.append({'key': "light", 'value': system.light})
+            update_list.append({'key': "power_outage", 'value': system.power_outage})
+            update_list.append({'key': "offline", 'value': system.offline})
+            update_list.append({'key': "wifi_ssid", 'value': system.wifi_ssid})
+        device.updateStatesOnServer(update_list)
+
+    def update_sensor_device(self, device):
+        system = self.known_systems[int(device.pluginProps["system"])]
+        sensor = self.known_sensors[system.system_id][device.address]
+        self.logger.debug(f"{device.name}: doing update for {sensor.serial}")
+        update_list = [
+            {'key': "name", 'value': sensor.name},
+            {'key': "serial", 'value': sensor.serial},
+            {'key': "type", 'value': device_type_strings[sensor.type]},
+        ]
+        if system.version == 3:
+            update_list.append({'key': "error", 'value': sensor.error})
+            update_list.append({'key': "low_battery", 'value': sensor.low_battery})
+            update_list.append({'key': "offline", 'value': sensor.offline})
+            update_list.append({'key': "triggered", 'value': sensor.triggered})
+            update_list.append({'key': "trigger_instantly", 'value': sensor.trigger_instantly})
+        device.updateStatesOnServer(update_list)
+
+    def getDeviceStateList(self, device):
+        self.logger.debug(f"{device.name}: getDeviceStateList")
+        stateList = indigo.PluginBase.getDeviceStateList(self, device)
+        return stateList
 
     ########################################
     # Trigger (Event) handling
@@ -287,6 +354,31 @@ class Plugin(indigo.PluginBase):
         self.logger.debug(f"{trigger.name}: Removing Trigger")
         assert trigger.id in self.triggers
         self.triggers.remove(trigger.id)
+
+    ########################################
+    # callbacks from device creation UI
+    ########################################
+
+    def get_system_list(self, filter="", valuesDict=None, typeId="", targetId=0):
+        self.logger.threaddebug(f"get_system_list: typeId = {typeId}, targetId = {targetId}, filter = {filter}, valuesDict = {valuesDict}")
+        systems = [
+            (system.system_id, system.address)
+            for system in self.known_systems.values()
+        ]
+        self.logger.debug(f"get_system_list: systems = {systems}")
+        return systems
+
+    def get_sensor_list(self, filter="", valuesDict=None, typeId="", targetId=0):
+        self.logger.threaddebug(f"get_sensor_list: typeId = {typeId}, targetId = {targetId}, filter = {filter}, valuesDict = {valuesDict}")
+        try:
+            sensors = []
+            for sensor in self.known_sensors[int(valuesDict["system"])].values():
+                if sensor.type in device_type_strings:
+                    sensors.append((sensor.serial, f"{sensor.name} - {device_type_strings[sensor.type]}"))
+        except KeyError:
+            sensors = []
+        self.logger.debug(f"get_sensor_list: sensors = {sensors}")
+        return sensors
 
     # doesn't do anything, just needed to force other menus to dynamically refresh
     def menuChanged(self, valuesDict=None, typeId=None, devId=None):  # noqa
