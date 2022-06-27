@@ -7,18 +7,32 @@ import json
 import time
 import threading
 import asyncio
-
-import simplipy.api
 from aiohttp import ClientSession
 
-from SimpliSafe import SimpliSafe
-
+import simplipy.api
 from simplipy import API
 from simplipy.errors import (
     EndpointUnavailableError,
     InvalidCredentialsError,
     SimplipyError,
     WebsocketError,
+)
+
+from simplipy.websocket import (
+    EVENT_AUTOMATIC_TEST,
+    EVENT_CAMERA_MOTION_DETECTED,
+    EVENT_CONNECTION_LOST,
+    EVENT_CONNECTION_RESTORED,
+    EVENT_DEVICE_TEST,
+    EVENT_DOORBELL_DETECTED,
+    EVENT_LOCK_LOCKED,
+    EVENT_LOCK_UNLOCKED,
+    EVENT_POWER_OUTAGE,
+    EVENT_POWER_RESTORED,
+    EVENT_SECRET_ALERT_TRIGGERED,
+    EVENT_SENSOR_PAIRED_AND_NAMED,
+    EVENT_USER_INITIATED_TEST,
+    WebsocketEvent,
 )
 
 state_strings = {
@@ -57,6 +71,8 @@ device_type_strings = {
     simplipy.system.DeviceTypes.UNKNOWN: "Unknown Device",
 }
 
+TOKEN_REFRESH_TIMER = 30 * 60.0  # 30 minutes
+
 class Plugin(indigo.PluginBase):
 
     def __init__(self, pluginId, pluginDisplayName, pluginVersion, pluginPrefs):
@@ -76,19 +92,22 @@ class Plugin(indigo.PluginBase):
         self._api = None
         self._session = None
         self.sms_code = None
-        self.auth_complete_event = asyncio.Event()
-        self.simplisafe = None
         self.known_systems = {}
         self.known_sensors = {}
         self.active_systems = {}
         self.active_sensors = {}
+
+        self._token_refresh_task: asyncio.Task | None = None
+        self._websocket_reconnect_task: asyncio.Task | None = None
+        self.systems: dict[int, SystemType] = {}
+
         self.update_needed = False
         self.updateFrequency = float(self.pluginPrefs.get('updateFrequency', "15")) * 60.0
         self.logger.debug(f"updateFrequency = {self.updateFrequency}")
         self.next_update = time.time() + self.updateFrequency
 
     def validatePrefsConfigUi(self, valuesDict):
-
+        self.logger.threaddebug(f"validatePrefsConfigUi, valuesDict = {valuesDict}")
         errorDict = indigo.Dict()
         valuesDict['auth_code'] = ""
         username = valuesDict.get('username', None)
@@ -102,6 +121,7 @@ class Plugin(indigo.PluginBase):
         return True, valuesDict
 
     def closedPrefsConfigUi(self, valuesDict, userCancelled):
+        self.logger.threaddebug(f"closedPrefsConfigUi, valuesDict = {valuesDict}")
         if not userCancelled:
             self.logLevel = int(valuesDict.get("logLevel", logging.INFO))
             self.indigo_log_handler.setLevel(self.logLevel)
@@ -109,15 +129,18 @@ class Plugin(indigo.PluginBase):
             self.logger.debug(f"LogLevel = {self.logLevel}")
 
     def startup(self):
+        self.logger.debug("startup")
         self._event_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._event_loop)
         self._async_thread = threading.Thread(target=self._run_async_thread)
         self._async_thread.start()
+        self.logger.debug("startup complete")
 
     def _run_async_thread(self):
         self.logger.debug("_run_async_thread starting")
         self._event_loop.run_until_complete(self._async_main())
         self._event_loop.close()
+        self.logger.debug("_run_async_thread ending")
 
     def request_auth(self, valuesDict, typeId):
         self.logger.threaddebug(f"request_auth typeId = {typeId}, valuesDict = {valuesDict}")
@@ -143,9 +166,7 @@ class Plugin(indigo.PluginBase):
             except Exception as err:
                 self.logger.warning(f"_authenticate: Error refreshing auth token: {err}")
 
-        if self._api and self._api.auth_state == simplipy.api.AuthStates.AUTHENTICATED:
-            self.auth_complete_event.set()
-        else:
+        if not self._api or self._api.auth_state != simplipy.api.AuthStates.AUTHENTICATED:
             # no token or refresh did not work, remind user to start the auth flow
             self.logger.warning("SimpliSafe plugin not authenticated - use plugin menu Authenticate...")
 
@@ -168,9 +189,6 @@ class Plugin(indigo.PluginBase):
             self.logger.warning("SimpliSafe authentication in progress - verify 2FA email")
             self._event_loop.create_task(self._auth_verify_email())
 
-        elif self._api and self._api.auth_state == simplipy.api.AuthStates.AUTHENTICATED:
-            self.auth_complete_event.set()
-
     # wait for Event from Config dialog to verify SMS code
     async def _auth_verify_sms(self):
         self.logger.debug(f"_auth_verify_sms, code = {self.sms_code}")
@@ -179,9 +197,7 @@ class Plugin(indigo.PluginBase):
         except InvalidCredentialsError as err:
             self.logger.error("Invalid SMS 2FA code")
 
-        if self._api and self._api.auth_state == simplipy.api.AuthStates.AUTHENTICATED:
-            self.auth_complete_event.set()
-        else:
+        if not self._api or self._api.auth_state != simplipy.api.AuthStates.AUTHENTICATED:
             self.logger.warning("SimpliSafe authentication failed - use plugin menu Authenticate...")
 
     # wait for user to validate 2FA email
@@ -194,12 +210,22 @@ class Plugin(indigo.PluginBase):
             self.logger.warning(f"Verify 2FA email error: {err}")
             self.logger.warning("SimpliSafe authentication failed - use plugin menu Authenticate...")
 
-        if self._api and self._api.auth_state == simplipy.api.AuthStates.AUTHENTICATED:
-            self.auth_complete_event.set()
-        else:
+        if not self._api or self._api.auth_state != simplipy.api.AuthStates.AUTHENTICATED:
             # timed out, or verify failed, do it again
             self._event_loop.create_task(self._auth_verify_email())
 
+    async def async_save_refresh_token(self, token: str) -> None:
+        """Save a refresh token to the config entry."""
+        self.logger.debug(f"async_save_refresh_token: {token}")
+
+    async def async_handle_refresh_token(self, token: str) -> None:
+        """Handle a new refresh token."""
+        await async_save_refresh_token(token)
+
+        # Open a new websocket connection with the fresh token:
+        assert self._api.websocket
+        await self._async_cancel_websocket_loop()
+        self._websocket_reconnect_task = asyncio.create_task(self._async_start_websocket_loop())
 
     async def _async_main(self):
         self.logger.debug("async_main starting")
@@ -218,23 +244,22 @@ class Plugin(indigo.PluginBase):
             indigo.server.savePluginPrefs()
 
             self._api.websocket.add_event_callback(self.event_handler)
+            self._api.add_refresh_token_callback(self.async_handle_refresh_token)
+            self._websocket_reconnect_task = asyncio.create_task(self._async_start_websocket_loop())
+            self._token_refresh_task = asyncio.create_task(self._async_token_refresh_loop())
 
-            self.simplisafe = SimpliSafe(self._api)
-            try:
-                await self.simplisafe.async_init()
-            except SimplipyError as err:
-                raise ConfigEntryNotReady from err
+            self.systems = await self._api.async_get_systems()
 
-            for system in self.simplisafe.systems.values():
+            for system in self.systems.values():
                 self.known_systems[system.system_id] = system
                 self.known_sensors[system.system_id] = {}
                 for sensor in system.sensors.values():
                     self.known_sensors[system.system_id][sensor.serial] = sensor
 
-            self.logger.debug(f"known_systems: {self.known_systems}")
-            self.logger.debug(f"known_sensors: {self.known_sensors}")
-            self.logger.debug(f"active_systems: {self.active_systems}")
-            self.logger.debug(f"active_sensors: {self.active_sensors}")
+            self.logger.threaddebug(f"known_systems: {self.known_systems}")
+            self.logger.threaddebug(f"known_sensors: {self.known_sensors}")
+            self.logger.threaddebug(f"active_systems: {self.active_systems}")
+            self.logger.threaddebug(f"active_sensors: {self.active_sensors}")
 
             while True:
                 if (time.time() > self.next_update) or self.update_needed:
@@ -253,20 +278,29 @@ class Plugin(indigo.PluginBase):
                     break
 
     def event_handler(self, event):
-        self.logger.debug(f"Received a SimpliSafe™ event: {event.info}")
+        self.logger.debug(f"Received a SimpliSafe™ event:")
+        self.logger.debug(f"event.info:          {event.info}")
+        self.logger.debug(f"event.system_id:     {event.system_id}")
+        self.logger.debug(f"event.timestamp:     {event.timestamp}")
+        self.logger.debug(f"event.event_type:    {event.event_type}")
+        self.logger.debug(f"event.changed_by:    {event.changed_by}")
+        self.logger.debug(f"event.sensor_name:   {event.sensor_name}")
+        self.logger.debug(f"event.sensor_serial: {event.sensor_serial}")
+        self.logger.debug(f"event.sensor_type:   {event.sensor_type}")
+        self.triggerCheck(event)
 
     ##################
     # Device Methods
     ##################
 
     def getDeviceConfigUiValues(self, pluginProps, typeId, devId):
-        self.logger.debug(f"getDeviceConfigUiValues, typeId = {typeId}, pluginProps = {pluginProps}")
+        self.logger.threaddebug(f"getDeviceConfigUiValues, typeId = {typeId}, pluginProps = {pluginProps}")
         valuesDict = indigo.Dict(pluginProps)
         errorsDict = indigo.Dict()
         return valuesDict, errorsDict
 
     def validateDeviceConfigUi(self, valuesDict, typeId, devId):
-        self.logger.debug(f"validateDeviceConfigUi, typeId = {typeId}, valuesDict = {valuesDict}")
+        self.logger.threaddebug(f"validateDeviceConfigUi, typeId = {typeId}, valuesDict = {valuesDict}")
         errorsDict = indigo.Dict()
         if len(errorsDict) > 0:
             return False, valuesDict, errorsDict
@@ -289,6 +323,7 @@ class Plugin(indigo.PluginBase):
             del self.active_sensors[device.id]
 
     def didDeviceCommPropertyChange(self, origDev, newDev):  # noqa
+        self.logger.threaddebug(f"{origDev.name}: didDeviceCommPropertyChange")
         return False
 
     def update_system_device(self, device):
@@ -347,13 +382,20 @@ class Plugin(indigo.PluginBase):
 
     def triggerStartProcessing(self, trigger):
         self.logger.debug(f"{trigger.name}: Adding Trigger")
-        assert trigger.id not in self.triggers
-        self.triggers.append(trigger.id)
+        assert trigger not in self.triggers
+        self.triggers.append(trigger)
 
     def triggerStopProcessing(self, trigger):
         self.logger.debug(f"{trigger.name}: Removing Trigger")
-        assert trigger.id in self.triggers
-        self.triggers.remove(trigger.id)
+        assert trigger in self.triggers
+        self.triggers.remove(trigger)
+
+    def triggerCheck(self, event):
+        self.logger.debug(f"triggerCheck:  system = {event.system_id}, type = {event.event_type}")
+        for trigger in self.triggers:
+            self.logger.debug(f"Checking Trigger {trigger.name}")
+            if trigger.pluginProps['system'] == event.system_id:
+                indigo.trigger.execute(trigger)
 
     ########################################
     # callbacks from device creation UI
@@ -382,6 +424,7 @@ class Plugin(indigo.PluginBase):
 
     # doesn't do anything, just needed to force other menus to dynamically refresh
     def menuChanged(self, valuesDict=None, typeId=None, devId=None):  # noqa
+        self.logger.threaddebug(f"menuChanged: typeId = {typeId}, devId = {devId}, valuesDict = {valuesDict}")
         return valuesDict
 
     ########################################
@@ -393,5 +436,57 @@ class Plugin(indigo.PluginBase):
         self._event_loop.create_task(self._async_set_mode(system_id, mode))
 
     async def _async_set_mode(self, system_id, mode):
-
         pass
+
+    ########################################
+    # Recurring tasks
+    ########################################
+
+    async def _async_start_websocket_loop(self) -> None:
+        """Start a websocket reconnection loop."""
+        self.logger.debug("_async_start_websocket_loop: starting")
+        assert self._api.websocket
+        try:
+            await self._api.websocket.async_connect()
+            await self._api.websocket.async_listen()
+        except asyncio.CancelledError as err:
+            self.logger.debug("_async_start_websocket_loop: cancelled")
+            raise
+        except WebsocketError as err:
+            self.logger.error(f"_async_start_websocket_loop: WebsocketError: {err}")
+        except Exception as err:  # pylint: disable=broad-except
+            self.logger.error(f"_async_start_websocket_loop: Exception: {err}")
+
+        await self._async_cancel_websocket_loop()
+        self._websocket_reconnect_task = asyncio.create_task(self._async_start_websocket_loop())
+
+    async def _async_cancel_websocket_loop(self) -> None:
+        """Stop any existing websocket reconnection loop."""
+        self.logger.debug("_async_cancel_websocket_loop: starting")
+        if self._websocket_reconnect_task:
+            self._websocket_reconnect_task.cancel()
+            try:
+                await self._websocket_reconnect_task
+            except asyncio.CancelledError as err:
+                self._websocket_reconnect_task = None
+            except Exception as err:  # pylint: disable=broad-except
+                self.logger.error(f"_async_cancel_websocket_loop: Exception: {err}")
+
+            assert self._api.websocket
+            await self._api.websocket.async_disconnect()
+        self.logger.debug("_async_cancel_websocket_loop: exiting")
+
+    async def _async_token_refresh_loop(self) -> None:
+        try:
+            while True:
+                self.logger.debug(f"do_token_refresh: starting timer for {TOKEN_REFRESH_TIMER} seconds")
+                await asyncio.sleep(TOKEN_REFRESH_TIMER)
+                await self._api.async_refresh_access_token()  # noqa
+                self.logger.debug(f"do_token_refresh: New Refresh Token = {_api.refresh_token}")
+                self.pluginPrefs["refresh_token"] = self._api.refresh_token
+                indigo.server.savePluginPrefs()
+        except asyncio.CancelledError:
+            self.logger.debug("do_token_refresh: cancelled")
+            raise
+
+

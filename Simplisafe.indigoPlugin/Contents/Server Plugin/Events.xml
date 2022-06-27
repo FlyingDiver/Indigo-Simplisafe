@@ -3,9 +3,9 @@
     <Event id="alarmEvent">
         <Name>Alarm Event</Name>
 		<ConfigUI>
-            <Field id="ssAccount" type="menu">
-                <Label>Account:</Label>
-            	<List class="indigo.devices" filter="self" />
+            <Field id="system" type="menu">
+                <Label>System:</Label>
+            	<List class="indigo.devices" filter="self.system" />
                 <CallbackMethod>menuChanged</CallbackMethod>            
             </Field>
 		</ConfigUI>
