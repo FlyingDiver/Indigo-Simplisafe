@@ -14,5 +14,25 @@
             </Field>
         </ConfigUI>
     </Action>
-
+    <Action id="set_pin" deviceFilter="self.system">
+        <Name>Set PIN</Name>
+        <CallbackMethod>actionSetPIN</CallbackMethod>
+        <ConfigUI>
+            <Field id="label" type="textfield" defaultValue="">
+                <Label>Label:</Label>
+            </Field>
+            <Field id="pin" type="textfield" defaultValue="">
+                <Label>PIN:</Label>
+            </Field>
+        </ConfigUI>
+    </Action>
+    <Action id="remove_pin" deviceFilter="self.system">
+        <Name>Remove PIN</Name>
+        <CallbackMethod>actionRemovePIN</CallbackMethod>
+        <ConfigUI>
+            <Field id="label" type="textfield" defaultValue="">
+                <Label>Label:</Label>
+            </Field>
+        </ConfigUI>
+    </Action>
 </Actions>

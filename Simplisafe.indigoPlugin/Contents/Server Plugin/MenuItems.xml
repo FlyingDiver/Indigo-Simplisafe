@@ -17,6 +17,17 @@
 		        <CallbackMethod>verify_sms</CallbackMethod>
 	        </Field>
         </ConfigUI>
-    </MenuItem>
+	</MenuItem>
+	<MenuItem id="print_pins">
+        <Name>Print PINs to Log</Name>
+		<ConfigUI>
+            <Field id="system" type="menu">
+                <Label>System:</Label>
+            	<List class="indigo.devices" filter="self.system" />
+                <CallbackMethod>print_pins</CallbackMethod>
+            </Field>
+		</ConfigUI>
+	</MenuItem>
 </MenuItems>
+
 

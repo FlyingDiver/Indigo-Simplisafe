@@ -154,6 +154,24 @@ class Plugin(indigo.PluginBase):
         self._event_loop.create_task(self._auth_verify_sms())
         return valuesDict
 
+    def print_pins(self, valuesDict, typeId):
+        self.logger.threaddebug(f"print_pins typeId = {typeId}, valuesDict = {valuesDict}")
+        device = indigo.devices[int(valuesDict['system'])]
+        system = self.known_systems[int(device.address)]
+        self._event_loop.create_task(self._async_print_pins(system))
+        return valuesDict
+
+    async def _async_print_pins(self, system):
+        self.logger.debug("_async_print_pins starting")
+        try:
+            pins = await system.async_get_pins(cached=False)
+            self.logger.debug(f"_async_print_pins pins = {pins}")
+
+            for k, v in pins.items():
+                self.logger.info(f"{k}: {v}")
+        except Exception as e:
+            self.logger.error(f"_async_print_pins error: {e}")
+
     # Use refresh token to authenticate with SimpliSafe
     async def _authenticate_with_token(self):
         token = self.pluginPrefs.get("refresh_token", None)
@@ -214,19 +232,6 @@ class Plugin(indigo.PluginBase):
             # timed out, or verify failed, do it again
             self._event_loop.create_task(self._auth_verify_email())
 
-    async def async_save_refresh_token(self, token: str) -> None:
-        """Save a refresh token to the config entry."""
-        self.logger.debug(f"async_save_refresh_token: {token}")
-
-    async def async_handle_refresh_token(self, token: str) -> None:
-        """Handle a new refresh token."""
-        await async_save_refresh_token(token)
-
-        # Open a new websocket connection with the fresh token:
-        assert self._api.websocket
-        await self._async_cancel_websocket_loop()
-        self._websocket_reconnect_task = asyncio.create_task(self._async_start_websocket_loop())
-
     async def _async_main(self):
         self.logger.debug("async_main starting")
 
@@ -243,9 +248,8 @@ class Plugin(indigo.PluginBase):
             self.pluginPrefs["refresh_token"] = self._api.refresh_token
             indigo.server.savePluginPrefs()
 
-            self._api.websocket.add_event_callback(self.event_handler)
-            self._api.add_refresh_token_callback(self.async_handle_refresh_token)
             self._websocket_reconnect_task = asyncio.create_task(self._async_start_websocket_loop())
+            self._api.websocket.add_event_callback(self.event_handler)
             self._token_refresh_task = asyncio.create_task(self._async_token_refresh_loop())
 
             self.systems = await self._api.async_get_systems()
@@ -275,6 +279,8 @@ class Plugin(indigo.PluginBase):
                 await asyncio.sleep(1.0)
                 if self.stopThread:
                     self.logger.debug("_async_main: stopping")
+                    await _async_cancel_websocket_loop(self._websocket_reconnect_task)
+                    await self._token_refresh_task.cancel()
                     break
 
     def event_handler(self, event):
@@ -430,13 +436,52 @@ class Plugin(indigo.PluginBase):
     ########################################
     # Action handling
     ########################################
-    def actionSetMode(self, action, systemDevice, callerWaitingForResult):
-        mode = action.props.get("mode", "away")
-        system_id = systemDevice.address
-        self._event_loop.create_task(self._async_set_mode(system_id, mode))
 
-    async def _async_set_mode(self, system_id, mode):
-        pass
+    def actionSetMode(self, action, device, callerWaitingForResult):
+        self.logger.threaddebug(f"actionSetMode: action = {action}, device = {device.name}, callerWaitingForResult = {callerWaitingForResult}")
+        mode = action.props.get("mode", None)
+        if mode not in ['away', 'home', 'off']:
+            self.logger.error(f"actionSetMode: Invalid mode '{mode}'")
+            return
+        system = self.known_systems[int(device.address)]
+        self._event_loop.create_task(self._async_set_mode(system, mode))
+
+    async def _async_set_mode(self, system, mode):
+        if mode == 'off':
+            await system.async_set_off()
+        elif mode == 'away':
+            await system.async_set_away()
+        elif mode == 'home':
+            await system.async_set_home()
+        else:
+            self.logger.error(f"_async_set_mode: Invalid mode '{mode}'")
+
+    def actionSetPIN(self, action, device, callerWaitingForResult):
+        self.logger.threaddebug(f"actionSetMode: action = {action}, device = {device.name}, callerWaitingForResult = {callerWaitingForResult}")
+        label = action.props.get("label", None)
+        pin = action.props.get("pin", None)
+        if not label or len(label) == 0 or not pin or len(pin) == 0:
+            self.logger.error(f"actionSetPIN: Invalid label or pin")
+            return
+        system = self.known_systems[int(device.address)]
+#        self._event_loop.create_task(system.async_set_pin(label, pin))
+        self._event_loop.create_task(self._async_set_pin(system, label, pin))
+
+    async def _async_set_pin(self, system, label, pin):
+        self.logger.threaddebug(f"_async_set_pin: system = {system.system_id}, label = {label}, pin = {pin}")
+        try:
+            await system.async_set_pin(label, pin)
+        except Exception as e:
+            self.logger.error(f"_set_pin: {e}")
+
+    def actionRemovePIN(self, action, device, callerWaitingForResult):
+        self.logger.threaddebug(f"actionSetMode: action = {action}, device = {device.name}, callerWaitingForResult = {callerWaitingForResult}")
+        label = action.props.get("label", None)
+        if not label or len(label) == 0:
+            self.logger.error(f"actionRemovePIN: Invalid label")
+            return
+        system = self.known_systems[int(device.address)]
+        self._event_loop.create_task(system.async_remove_pin(label))
 
     ########################################
     # Recurring tasks
@@ -444,7 +489,7 @@ class Plugin(indigo.PluginBase):
 
     async def _async_start_websocket_loop(self) -> None:
         """Start a websocket reconnection loop."""
-        self.logger.debug("_async_start_websocket_loop: starting")
+        self.logger.threaddebug("_async_start_websocket_loop: starting")
         assert self._api.websocket
         try:
             await self._api.websocket.async_connect()
@@ -462,7 +507,7 @@ class Plugin(indigo.PluginBase):
 
     async def _async_cancel_websocket_loop(self) -> None:
         """Stop any existing websocket reconnection loop."""
-        self.logger.debug("_async_cancel_websocket_loop: starting")
+        self.logger.threaddebug("_async_cancel_websocket_loop: starting")
         if self._websocket_reconnect_task:
             self._websocket_reconnect_task.cancel()
             try:
@@ -474,15 +519,18 @@ class Plugin(indigo.PluginBase):
 
             assert self._api.websocket
             await self._api.websocket.async_disconnect()
-        self.logger.debug("_async_cancel_websocket_loop: exiting")
+        self.logger.threaddebug("_async_cancel_websocket_loop: exiting")
 
     async def _async_token_refresh_loop(self) -> None:
         try:
             while True:
                 self.logger.debug(f"do_token_refresh: starting timer for {TOKEN_REFRESH_TIMER} seconds")
                 await asyncio.sleep(TOKEN_REFRESH_TIMER)
-                await self._api.async_refresh_access_token()  # noqa
-                self.logger.debug(f"do_token_refresh: New Refresh Token = {_api.refresh_token}")
+                try:
+                    await self.api.async_refresh_access_token()
+                except AttributeError:
+                    await self._api._async_refresh_access_token() # noqa
+                self.logger.debug(f"do_token_refresh: New Refresh Token = {self._api.refresh_token}")
                 self.pluginPrefs["refresh_token"] = self._api.refresh_token
                 indigo.server.savePluginPrefs()
         except asyncio.CancelledError:
