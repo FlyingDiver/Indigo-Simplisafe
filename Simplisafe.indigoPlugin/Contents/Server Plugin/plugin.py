@@ -418,30 +418,39 @@ class Plugin(indigo.PluginBase):
             self.logger.error(f"async_set_mode: Invalid mode '{mode}'")
 
     def action_set_pin(self, action, device, callerWaitingForResult):
-        self.logger.threaddebug(f"action_set_pin: action = {action}, device = {device.name}, callerWaitingForResult = {callerWaitingForResult}")
         label = action.props.get("label", None)
         pin = action.props.get("pin", None)
+        self.logger.debug(f"{device.name}: action_set_pin: label = {label}, pin = {pin}")
         if not label or len(label) == 0 or not pin or len(pin) == 0:
-            self.logger.error(f"action_set_pin: Invalid label or pin")
+            self.logger.error(f"{device.name}: action_set_pin: Invalid label or pin")
             return
         system = self.known_systems[int(device.address)]
         self.event_loop.create_task(self.async_set_pin(system, label, pin))
 
     async def async_set_pin(self, system, label, pin):
-        self.logger.threaddebug(f"async_set_pin: system = {system.system_id}, label = {label}, pin = {pin}")
+        self.logger.debug(f"async_set_pin start: system = {system.system_id}, label = {label}, pin = {pin}")
         try:
             await system.async_set_pin(label, pin)
         except Exception as e:
-            self.logger.error(f"_set_pin: {e}")
+            self.logger.error(f"async_set_pin: {e}")
+        self.logger.debug(f"async_set_pin complete: system = {system.system_id}, label = {label}, pin = {pin}")
 
     def action_remove_pin(self, action, device, callerWaitingForResult):
-        self.logger.threaddebug(f"action_remove_pin: action = {action}, device = {device.name}, callerWaitingForResult = {callerWaitingForResult}")
         label = action.props.get("label", None)
+        self.logger.debug(f"{device.name}: action_remove_pin: label = {label}")
         if not label or len(label) == 0:
             self.logger.error(f"action_remove_pin: Invalid label")
             return
         system = self.known_systems[int(device.address)]
-        self.event_loop.create_task(system.async_remove_pin(label))
+        self.event_loop.create_task(self.async_remove_pin(system, label))
+
+    async def async_remove_pin(self, system, label):
+        self.logger.debug(f"async_remove_pin start: system = {system.system_id}, label = {label}")
+        try:
+            await system.async_remove_pin(label)
+        except Exception as e:
+            self.logger.error(f"async_remove_pin: {e}")
+        self.logger.debug(f"async_remove_pin complete: system = {system.system_id}, label = {label}")
 
     ########################################
     # Recurring tasks
@@ -456,7 +465,7 @@ class Plugin(indigo.PluginBase):
             await self.simplisafe.websocket.async_listen()
             self.logger.threaddebug("async_start_websocket_loop: async_listen() returned")
         except asyncio.CancelledError as err:
-            self.logger.debug("async_start_websocket_loop: cancelled")
+            self.logger.threaddebug("async_start_websocket_loop: cancelled")
             raise
         except WebsocketError as err:
             self.logger.error(f"async_start_websocket_loop: WebsocketError: {err}")
