@@ -11,27 +11,27 @@
             </Field>
         </ConfigUI>
         <States>
-            <State id="system_address" defautValue="">
+            <State id="system_address" defaultValue="">
                 <ValueType>String</ValueType>
                 <TriggerLabel>System Address</TriggerLabel>
                 <ControlPageLabel>System Address</ControlPageLabel>
             </State>
-             <State id="connection_type" defautValue="">
+             <State id="connection_type" defaultValue="">
                 <ValueType>String</ValueType>
                 <TriggerLabel>Connection Type</TriggerLabel>
                 <ControlPageLabel>Connection Type</ControlPageLabel>
             </State>
-             <State id="system_serial" defautValue="">
+             <State id="system_serial" defaultValue="">
                 <ValueType>String</ValueType>
                 <TriggerLabel>System Serial</TriggerLabel>
                 <ControlPageLabel>System Serial</ControlPageLabel>
             </State>
-             <State id="system_id" defautValue="">
+             <State id="system_id" defaultValue="">
                 <ValueType>String</ValueType>
                 <TriggerLabel>System ID</TriggerLabel>
                 <ControlPageLabel>System ID</ControlPageLabel>
             </State>
-            <State id="system_version" defautValue="">
+            <State id="system_version" defaultValue="">
                 <ValueType>String</ValueType>
                 <TriggerLabel>System Version</TriggerLabel>
                 <ControlPageLabel>System Version</ControlPageLabel>
@@ -41,84 +41,120 @@
 	            <TriggerLabel>System State is</TriggerLabel>
 	            <ControlPageLabel>System State</ControlPageLabel>
             </State>
-             <State id="system_temperature" defautValue="">
+             <State id="system_temperature" defaultValue="">
                 <ValueType>Number</ValueType>
                 <TriggerLabel>System Temperature</TriggerLabel>
                 <ControlPageLabel>System Temperature</ControlPageLabel>
             </State>
-            <State id="alarm_duration" defautValue="">
+            <State id="alarm_duration" defaultValue="">
                 <ValueType>Number</ValueType>
                 <TriggerLabel>Alarm Duration</TriggerLabel>
                 <ControlPageLabel>Alarm Duration</ControlPageLabel>
             </State>
-            <State id="battery_backup_power_level" defautValue="">
+            <State id="battery_backup_power_level" defaultValue="">
                 <ValueType>Number</ValueType>
                 <TriggerLabel>Backup Power</TriggerLabel>
                 <ControlPageLabel>Backup Power</ControlPageLabel>
             </State>
-            <State id="wall_power_level" defautValue="">
+            <State id="wall_power_level" defaultValue="">
                 <ValueType>Number</ValueType>
                 <TriggerLabel>Wall Power</TriggerLabel>
                 <ControlPageLabel>Wall Power</ControlPageLabel>
             </State>
-            <State id="entry_delay_away" defautValue="">
+            <State id="entry_delay_away" defaultValue="">
                 <ValueType>Number</ValueType>
                 <TriggerLabel>WEntry Delay Away</TriggerLabel>
                 <ControlPageLabel>Entry Delay Away</ControlPageLabel>
             </State>
-            <State id="entry_delay_home" defautValue="">
+            <State id="entry_delay_home" defaultValue="">
                 <ValueType>Number</ValueType>
                 <TriggerLabel>Entry Delay Home</TriggerLabel>
                 <ControlPageLabel>Entry Delay Home</ControlPageLabel>
             </State>
-            <State id="exit_delay_away" defautValue="">
+            <State id="exit_delay_away" defaultValue="">
                 <ValueType>Number</ValueType>
                 <TriggerLabel>Exit Delay Away</TriggerLabel>
                 <ControlPageLabel>Exit Delay Away</ControlPageLabel>
             </State>
-            <State id="exit_delay_home" defautValue="">
+            <State id="exit_delay_home" defaultValue="">
                 <ValueType>Number</ValueType>
                 <TriggerLabel>Exit Delay Home</TriggerLabel>
                 <ControlPageLabel>Exit Delay Home</ControlPageLabel>
             </State>
-            <State id="gsm_strength" defautValue="">
+            <State id="gsm_strength" defaultValue="">
                 <ValueType>Number</ValueType>
                 <TriggerLabel>GSM Strength</TriggerLabel>
                 <ControlPageLabel>GSM Strength</ControlPageLabel>
             </State>
-            <State id="wifi_strength" defautValue="">
+            <State id="wifi_strength" defaultValue="">
                 <ValueType>Number</ValueType>
                 <TriggerLabel>Wifi Strength</TriggerLabel>
                 <ControlPageLabel>Wifi Strength</ControlPageLabel>
             </State>
-            <State id="light" defautValue="">
+            <State id="light" defaultValue="">
                 <ValueType>Boolean</ValueType>
                 <TriggerLabel>System Light</TriggerLabel>
                 <ControlPageLabel>System Light</ControlPageLabel>
             </State>
-            <State id="power_outage" defautValue="">
+            <State id="power_outage" defaultValue="">
                 <ValueType>Boolean</ValueType>
                 <TriggerLabel>Power Outage</TriggerLabel>
                 <ControlPageLabel>Power Outage</ControlPageLabel>
             </State>
-            <State id="offline" defautValue="">
+            <State id="offline" defaultValue="">
                 <ValueType>Boolean</ValueType>
                 <TriggerLabel>System Offline</TriggerLabel>
                 <ControlPageLabel>System Offline</ControlPageLabel>
             </State>
-            <State id="wifi_ssid" defautValue="">
+            <State id="wifi_ssid" defaultValue="">
                 <ValueType>String</ValueType>
                 <TriggerLabel>Wifi SSID</TriggerLabel>
                 <ControlPageLabel>Wifi SSID</ControlPageLabel>
+            </State>
+            <State id="last_event_info" defaultValue="">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Event Info</TriggerLabel>
+                <ControlPageLabel>Last Event Info</ControlPageLabel>
+            </State>
+            <State id="last_event_timestamp" defaultValue="">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Event Timestamp</TriggerLabel>
+                <ControlPageLabel>Last Event Timestamp</ControlPageLabel>
+            </State>
+            <State id="last_event_type" defaultValue="">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Event Type</TriggerLabel>
+                <ControlPageLabel>Last Event Type</ControlPageLabel>
+            </State>
+             <State id="last_event_changed_by" defaultValue="">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Event Changed By</TriggerLabel>
+                <ControlPageLabel>Last Event Changed By</ControlPageLabel>
+            </State>
+            <State id="last_event_sensor_name" defaultValue="">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Event Sensor Name</TriggerLabel>
+                <ControlPageLabel>Last Event Sensor Name</ControlPageLabel>
+            </State>
+            <State id="last_event_sensor_serial" defaultValue="">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Event Sensor Serial</TriggerLabel>
+                <ControlPageLabel>Last Event Sensor Serial</ControlPageLabel>
+            </State>
+            <State id="last_event_sensor_type" defaultValue="">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Last Event Sensor Type</TriggerLabel>
+                <ControlPageLabel>Last Event Sensor Type</ControlPageLabel>
             </State>
         </States>
         <UiDisplayStateId>system_state</UiDisplayStateId>
     </Device>
 
-    <Device type="sensor" id="simple_sensor">
-        <Name>On/Off Sensor Device</Name>
+    <Device type="sensor" id="sensor">
+        <Name>Sensor</Name>
         <ConfigUI>
 			<Field id="SupportsOnState" type="checkbox" defaultValue="true" hidden="true" />
+			<Field id="SupportsSensorValue" type="checkbox" defaultValue="false" hidden="true" />
 			<Field id="SupportsStatusRequest" type="checkbox" defaultValue="false" hidden="true" />
              <Field id="system" type="menu">
                 <Label>System:</Label>
@@ -127,51 +163,163 @@
             </Field>
             <Field id="address" type="menu">
                 <Label>Sensor:</Label>
-                <List class="self" method="get_sensor_list" dynamicReload="true"/>
+                <List class="self" method="get_device_list" filter="sensor" dynamicReload="true"/>
                 <CallbackMethod>menuChanged</CallbackMethod>
             </Field>
         </ConfigUI>
         <States>
-            <State id="name" defautValue="">
+            <State id="name" defaultValue="">
                 <ValueType>String</ValueType>
                 <TriggerLabel>Sensor Name</TriggerLabel>
                 <ControlPageLabel>Sensor Name</ControlPageLabel>
             </State>
-            <State id="serial" defautValue="">
+            <State id="serial" defaultValue="">
                 <ValueType>String</ValueType>
                 <TriggerLabel>Serial Number</TriggerLabel>
                 <ControlPageLabel>Serial Number</ControlPageLabel>
             </State>
-            <State id="type" defautValue="">
+            <State id="type" defaultValue="">
                 <ValueType>String</ValueType>
                 <TriggerLabel>Sensor Type</TriggerLabel>
                 <ControlPageLabel>Sensor Type</ControlPageLabel>
             </State>
-            <State id="error" defautValue="">
+            <State id="error" defaultValue="">
                 <ValueType>String</ValueType>
                 <TriggerLabel>Error Status</TriggerLabel>
                 <ControlPageLabel>Error Status</ControlPageLabel>
             </State>
-            <State id="low_battery" defautValue="">
+            <State id="low_battery" defaultValue="">
                 <ValueType>Boolean</ValueType>
                 <TriggerLabel>Low Battery</TriggerLabel>
                 <ControlPageLabel>Low Battery</ControlPageLabel>
             </State>
-            <State id="offline" defautValue="">
+            <State id="offline" defaultValue="">
                 <ValueType>Boolean</ValueType>
                 <TriggerLabel>Offline</TriggerLabel>
                 <ControlPageLabel>Offline</ControlPageLabel>
             </State>
-            <State id="triggered" defautValue="">
+            <State id="triggered" defaultValue="">
                 <ValueType>Boolean</ValueType>
                 <TriggerLabel>Triggered</TriggerLabel>
                 <ControlPageLabel>Triggered</ControlPageLabel>
             </State>
-            <State id="trigger_instantly" defautValue="">
+            <State id="trigger_instantly" defaultValue="">
                 <ValueType>Boolean</ValueType>
                 <TriggerLabel>Trigger Instantly</TriggerLabel>
                 <ControlPageLabel>Trigger Instantly</ControlPageLabel>
             </State>
         </States>
     </Device>
+
+    <Device type="custom" id="camera" >
+        <Name>Camera</Name>
+        <ConfigUI>
+             <Field id="system" type="menu">
+                <Label>System:</Label>
+                <List class="self" method="get_system_list" dynamicReload="true"/>
+                <CallbackMethod>menuChanged</CallbackMethod>
+            </Field>
+            <Field id="address" type="menu">
+                <Label>Sensor:</Label>
+                <List class="self" method="get_device_list" filter="camera" dynamicReload="true"/>
+                <CallbackMethod>menuChanged</CallbackMethod>
+            </Field>
+        </ConfigUI>
+        <States>
+           <State id="name" defaultValue="">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Camera Name</TriggerLabel>
+                <ControlPageLabel>Camera Name</ControlPageLabel>
+            </State>
+            <State id="serial" defaultValue="">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Camera Number</TriggerLabel>
+                <ControlPageLabel>Camera Number</ControlPageLabel>
+            </State>
+            <State id="camera_type" defaultValue="">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Camera Type</TriggerLabel>
+                <ControlPageLabel>Camera Type</ControlPageLabel>
+            </State>
+            <State id="video_url" defaultValue="">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Video Url</TriggerLabel>
+                <ControlPageLabel>Video Url</ControlPageLabel>
+            </State>
+            <State id="subscription_enabled" defaultValue="">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Subscription Enabled</TriggerLabel>
+                <ControlPageLabel>Subscription Enabled</ControlPageLabel>
+            </State>
+            <State id="shutter_open_when_off" defaultValue="">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>shutter_open_when_off</TriggerLabel>
+                <ControlPageLabel>shutter_open_when_off</ControlPageLabel>
+            </State>
+            <State id="shutter_open_when_home" defaultValue="">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>shutter_open_when_home</TriggerLabel>
+                <ControlPageLabel>shutter_open_when_home</ControlPageLabel>
+            </State>
+            <State id="shutter_open_when_away" defaultValue="">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>shutter_open_when_away</TriggerLabel>
+                <ControlPageLabel>shutter_open_when_away</ControlPageLabel>
+            </State>
+            <State id="status" defaultValue="">
+                <ValueType>String</ValueType>
+                <TriggerLabel>Camera Status</TriggerLabel>
+                <ControlPageLabel>Camera Status</ControlPageLabel>
+            </State>
+        </States>
+        <UiDisplayStateId>status</UiDisplayStateId>
+    </Device>
+
+    <Device type="relay" id="lock" >
+        <Name>Lock</Name>
+        <ConfigUI>
+            <Field id="IsLockSubType" type="checkbox"  defaultValue="true" hidden="true"  />
+			<Field id="SupportsOnState" type="checkbox" defaultValue="true" hidden="true" />
+			<Field id="SupportsSensorValue" type="checkbox" defaultValue="false" hidden="true" />
+			<Field id="SupportsStatusRequest" type="checkbox" defaultValue="false" hidden="true" />
+             <Field id="system" type="menu">
+                <Label>System:</Label>
+                <List class="self" method="get_system_list" dynamicReload="true"/>
+                <CallbackMethod>menuChanged</CallbackMethod>
+            </Field>
+            <Field id="address" type="menu">
+                <Label>Sensor:</Label>
+                <List class="self" method="get_device_list" filter="lock" dynamicReload="true"/>
+                <CallbackMethod>menuChanged</CallbackMethod>
+            </Field>
+        </ConfigUI>
+        <States>
+            <State id="state" defaultValue="">
+                <ValueType>String</ValueType>
+	            <TriggerLabel>Lock State is</TriggerLabel>
+	            <ControlPageLabel>Lock State</ControlPageLabel>
+            </State>
+            <State id="disabled" defaultValue="">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Disabled</TriggerLabel>
+                <ControlPageLabel>Disabled</ControlPageLabel>
+            </State>
+            <State id="lock_low_battery" defaultValue="">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Lock Low Battery</TriggerLabel>
+                <ControlPageLabel>Lock Low Battery</ControlPageLabel>
+            </State>
+            <State id="pin_pad_offline" defaultValue="">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Pin Pad Offline</TriggerLabel>
+                <ControlPageLabel>Pin Pad Offline</ControlPageLabel>
+            </State>
+            <State id="pin_pad_low_battery" defaultValue="">
+                <ValueType>Boolean</ValueType>
+                <TriggerLabel>Pin Pad Low Battery</TriggerLabel>
+                <ControlPageLabel>Pin Pad Low Battery</ControlPageLabel>
+            </State>
+        </States>
+    </Device>
+
 </Devices>

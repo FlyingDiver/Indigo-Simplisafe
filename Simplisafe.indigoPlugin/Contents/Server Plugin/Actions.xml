@@ -2,7 +2,7 @@
 <Actions>
     <Action id="set_mode" deviceFilter="self.system">
         <Name>Set Mode</Name>
-        <CallbackMethod>actionSetMode</CallbackMethod>
+        <CallbackMethod>action_set_mode</CallbackMethod>
         <ConfigUI>
             <Field id="mode" type="menu" defaultValue="away">
                 <Label>Mode:</Label>
@@ -16,7 +16,7 @@
     </Action>
     <Action id="set_pin" deviceFilter="self.system">
         <Name>Set PIN</Name>
-        <CallbackMethod>actionSetPIN</CallbackMethod>
+        <CallbackMethod>action_set_pin</CallbackMethod>
         <ConfigUI>
             <Field id="label" type="textfield" defaultValue="">
                 <Label>Label:</Label>
@@ -28,7 +28,7 @@
     </Action>
     <Action id="remove_pin" deviceFilter="self.system">
         <Name>Remove PIN</Name>
-        <CallbackMethod>actionRemovePIN</CallbackMethod>
+        <CallbackMethod>action_remove_pin</CallbackMethod>
         <ConfigUI>
             <Field id="label" type="textfield" defaultValue="">
                 <Label>Label:</Label>

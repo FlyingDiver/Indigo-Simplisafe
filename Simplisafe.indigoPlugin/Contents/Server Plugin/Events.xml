@@ -8,6 +8,39 @@
             	<List class="indigo.devices" filter="self.system" />
                 <CallbackMethod>menuChanged</CallbackMethod>            
             </Field>
+            <Field id="event_type" type="menu">
+                <Label>Event Type:</Label>
+                <List>
+                    <Option value="alarm_canceled">Alarm Canceled</Option>
+                    <Option value="alarm_triggered">Alarm Triggered</Option>
+                    <Option value="armed_away_by_keypad">Armed Away (Keypad)</Option>
+                    <Option value="armed_away_by_remote">Armed Away (Remote)</Option>
+                    <Option value="armed_away">Armed Away</Option>
+                    <Option value="armed_home">Armed Home</Option>
+                    <Option value="automatic_test">Automatic Test</Option>
+                    <Option value="away_exit_delay_by_keypad">Away Exit Delay (Keypad)</Option>
+                    <Option value="away_exit_delay_by_remote">Away Exit Delay (Remote)</Option>
+                    <Option value="camera_motion_detected">Camera Motion Detected</Option>
+                    <Option value="connection_lost">Connection Lost</Option>
+                    <Option value="connection_restored">Connection Restored</Option>
+                    <Option value="disarmed_by_master_pin">Disarmed by Master PIN</Option>
+                    <Option value="disarmed_by_remote">Disarmed by Remote</Option>
+                    <Option value="doorbell_detected">Doorbell Detected</Option>
+                    <Option value="entity_test">Entity Test</Option>
+                    <Option value="entry_detected">Entry Detected</Option>
+                    <Option value="home_exit_delay">Home Exit Delay</Option>
+                    <Option value="lock_error">Lock Error</Option>
+                    <Option value="lock_locked">Lock Locked</Option>
+                    <Option value="lock_unlocked">Lock Unlocked</Option>
+                    <Option value="motion_detected">Motion Detected</Option>
+                    <Option value="power_outage">Power Outage</Option>
+                    <Option value="power_restored">Power Restored</Option>
+                    <Option value="sensor_not_responding">Sensor Not Responding</Option>
+                    <Option value="sensor_paired_and_named">Sensor Paired and Named</Option>
+                    <Option value="sensor_restored">Sensor Restored</Option>
+                    <Option value="user_initiated_test">User Initiated Test</Option>
+                </List>
+            </Field>
 		</ConfigUI>
     </Event>
 </Events>
