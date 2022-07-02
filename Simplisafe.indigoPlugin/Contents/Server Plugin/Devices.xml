@@ -220,7 +220,7 @@
                 <CallbackMethod>menuChanged</CallbackMethod>
             </Field>
             <Field id="address" type="menu">
-                <Label>Sensor:</Label>
+                <Label>Camera:</Label>
                 <List class="self" method="get_device_list" filter="camera" dynamicReload="true"/>
                 <CallbackMethod>menuChanged</CallbackMethod>
             </Field>
@@ -288,7 +288,7 @@
                 <CallbackMethod>menuChanged</CallbackMethod>
             </Field>
             <Field id="address" type="menu">
-                <Label>Sensor:</Label>
+                <Label>Lock:</Label>
                 <List class="self" method="get_device_list" filter="lock" dynamicReload="true"/>
                 <CallbackMethod>menuChanged</CallbackMethod>
             </Field>

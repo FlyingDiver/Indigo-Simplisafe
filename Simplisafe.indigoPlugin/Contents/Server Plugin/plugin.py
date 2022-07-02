@@ -8,6 +8,7 @@ import time
 import threading
 import asyncio
 from aiohttp import ClientSession
+import aiofiles
 
 import simplipy.api
 import simplipy.device
@@ -452,6 +453,38 @@ class Plugin(indigo.PluginBase):
             self.logger.error(f"async_remove_pin: {e}")
         self.logger.debug(f"async_remove_pin complete: system = {system.system_id}, label = {label}")
 
+    def fetch_camera_video(self, action, device, callerWaitingForResult):
+        try:
+            camera = self.known_cameras[int(action.props['system'])][action.props['address']]
+        except KeyError as err:
+            self.logger.error(f"fetch_camera_video: Invalid camera: {err}")
+            return
+        if camera.status != "online":
+            self.logger.warning(f"{device.name}: fetch_camera_video error, camera '{camera.name}' is offline!")
+            return
+        clip_path = self.pluginPrefs.get("video_clip_path", "IndigoWebServer/public")
+        clip_name = action.props.get('clip_name', None)
+        clip_length = action.props.get('clip_length', 10)
+        if not clip_name or (len(clip_name) == 0):
+            clip_name = f"clip-{camera.serial}"
+        save_path = f"{indigo.server.getInstallFolderPath()}/{clip_path}/{clip_name}.flv"
+        self.event_loop.create_task(self.async_fetch_camera_video(camera.video_url(), save_path, clip_length))
+
+    async def async_fetch_camera_video(self, url, path, clip_length):
+        self.logger.debug(f"async_fetch_camera_video: url = {url}, path = {path}")
+        start_time = time.time()
+        try:
+            async with aiofiles.open(path, mode='wb') as f:
+                async with self.session.get(url, headers={'Authorization': f'Bearer {self.simplisafe.access_token}'}) as resp:
+                    async for data in resp.content.iter_chunked(10240):
+                        await f.write(data)
+                        if time.time() - start_time > clip_length:
+                            await f.flush()
+                            break
+        except Exception as e:
+            self.logger.error(f"async_fetch_camera_video: {e}")
+        self.logger.debug(f"async_fetch_camera_video: complete")
+
     ########################################
     # Recurring tasks
     ########################################
@@ -519,9 +552,8 @@ class Plugin(indigo.PluginBase):
 
     # update from the cloud
     async def async_system_refresh(self) -> None:
-        self.logger.debug(f"async_system_refresh")
-
         self.systems = await self.simplisafe.async_get_systems()
+        self.logger.debug(f"async_system_refresh: systems = {self.systems}")
 
         for system_id, system in self.systems.items():
             if system.version < 3:
@@ -551,19 +583,20 @@ class Plugin(indigo.PluginBase):
 
     # update the indigo devices
     async def async_device_refresh(self) -> None:
-        self.logger.debug(f"async_device_refresh")
 
         self.logger.threaddebug(f"active_systems: {self.active_systems}")
-        self.logger.threaddebug(f"active_sensors: {self.active_sensors}")
-        self.logger.threaddebug(f"active_cameras: {self.active_cameras}")
-        self.logger.threaddebug(f"active_locks:   {self.active_locks}")
-
         for device_id in self.active_systems:
             self.update_system_device(indigo.devices[device_id])
+
+        self.logger.threaddebug(f"active_sensors: {self.active_sensors}")
         for device_id in self.active_sensors:
             self.update_sensor_device(indigo.devices[device_id])
+
+        self.logger.threaddebug(f"active_cameras: {self.active_cameras}")
         for device_id in self.active_cameras:
             self.update_camera_device(indigo.devices[device_id])
+
+        self.logger.threaddebug(f"active_locks:   {self.active_locks}")
         for device_id in self.active_locks:
             self.update_lock_device(indigo.devices[device_id])
 

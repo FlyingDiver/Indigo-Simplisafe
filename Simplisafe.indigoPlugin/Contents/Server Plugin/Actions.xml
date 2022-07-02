@@ -14,6 +14,31 @@
             </Field>
         </ConfigUI>
     </Action>
+	<Action id="snapshotCamera">
+		<Name>Fetch Camera Video</Name>
+		<CallbackMethod>fetch_camera_video</CallbackMethod>
+        <ConfigUI>
+             <Field id="system" type="menu">
+                <Label>System:</Label>
+                <List class="self" method="get_system_list" dynamicReload="true"/>
+                <CallbackMethod>menuChanged</CallbackMethod>
+            </Field>
+            <Field id="address" type="menu">
+                <Label>Camera:</Label>
+                <List class="self" method="get_device_list" filter="camera" dynamicReload="true"/>
+                <CallbackMethod>menuChanged</CallbackMethod>
+            </Field>
+            <Field id="clip_name" type="textfield" defaultValue="">
+                <Label>Video filename:</Label>
+            </Field>
+            <Field id="clip_name_note" type="label" fontSize="small" fontColor="darkgray">
+                <Label>Default is clip-{camera.address}.</Label>
+            </Field>
+            <Field id="clip_length" type="textfield" defaultValue="10">
+                <Label>Video Clip Length (seconds):</Label>
+            </Field>
+       </ConfigUI>
+	</Action>
     <Action id="set_pin" deviceFilter="self.system">
         <Name>Set PIN</Name>
         <CallbackMethod>action_set_pin</CallbackMethod>

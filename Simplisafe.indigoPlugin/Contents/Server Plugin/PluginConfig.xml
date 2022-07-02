@@ -10,6 +10,13 @@
 	<Field id="password" type="textfield" secure="true">
 		<Label>Password:</Label>
 	</Field>
+	<Field id="separator1" type="separator"/>
+	<Field id="video_clip_path" type="textfield" defaultValue="Web Assets/public">
+        <Label>Path for Video clips:</Label>
+    </Field>
+    <Field id="video_clip_path_note" type="label" fontSize="small" fontColor="darkgray">
+        <Label>Path is relative to Indigo install directory.</Label>
+    </Field>
 	<Field id="separator2" type="separator"/>
   	<Field id="updateFrequency" type="textfield" defaultValue="15">
     	<Label>Update frequency (minutes):</Label>
