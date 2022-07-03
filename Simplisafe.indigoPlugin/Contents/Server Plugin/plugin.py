@@ -633,6 +633,13 @@ class Plugin(indigo.PluginBase):
         except Exception as e:
             self.logger.error(f"{device.name}: failed to update states: {e}")
 
+        if str(system.state) in ["SystemStates.ALARM", "SystemStates.ALARM_COUNT", "SystemStates.TEST", "SystemStates.UNKNOWN", "SystemStates.ERROR"]:
+            device.updateStateImageOnServer(indigo.kStateImageSel.SensorTripped)
+        elif str(system.state) in ["SystemStates.AWAY", "SystemStates.AWAY_COUNT", "SystemStates.HOME", "SystemStates.HOME_COUNT"]:
+            device.updateStateImageOnServer(indigo.kStateImageSel.SensorOn)
+        elif str(system.state) in ["SystemStates.ENTRY_DELAY", "SystemStates.EXIT_DELAY", "SystemStates.OFF"]:
+            device.updateStateImageOnServer(indigo.kStateImageSel.SensorOff)
+
     def update_sensor_device(self, device):
         try:
             system = self.known_systems[int(device.pluginProps["system"])]
@@ -655,8 +662,27 @@ class Plugin(indigo.PluginBase):
             {'key': "trigger_instantly", 'value': sensor.trigger_instantly},
             {'key': "onOffState", 'value': sensor.triggered},
         ]
-        if sensor.type == simplipy.system.DeviceTypes.TEMPERATURE:
+        if str(sensor.type) == "DeviceTypes.TEMPERATURE":
             update_list.append({'key': "sensorValue", 'value': sensor.temperature, 'uiValue': f"{int(sensor.temperature)}°F"})
+            if sensor.triggered:
+                device.updateStateImageOnServer(indigo.kStateImageSel.TemperatureSensorOn)
+            else:
+                device.updateStateImageOnServer(indigo.kStateImageSel.TemperatureSensor)
+        elif str(sensor.type) == "DeviceTypes.MOTION":
+            if sensor.triggered:
+                device.updateStateImageOnServer(indigo.kStateImageSel.MotionSensorTripped)
+            else:
+                device.updateStateImageOnServer(indigo.kStateImageSel.MotionSensor)
+        elif str(sensor.type) == "DeviceTypes.ENTRY":
+            if sensor.triggered:
+                device.updateStateImageOnServer(indigo.kStateImageSel.WindowSensorOpened)
+            else:
+                device.updateStateImageOnServer(indigo.kStateImageSel.WindowSensorClosed)
+        else:
+            if sensor.triggered:
+                device.updateStateImageOnServer(indigo.kStateImageSel.SensorTripped)
+            else:
+                device.updateStateImageOnServer(indigo.kStateImageSel.SensorOff)
         try:
             device.updateStatesOnServer(update_list)
         except Exception as e:
@@ -688,6 +714,11 @@ class Plugin(indigo.PluginBase):
             device.updateStatesOnServer(update_list)
         except Exception as e:
             self.logger.error(f"{device.name}: failed to update states: {e}")
+
+        if camera.status == "online":
+            device.updateStateImageOnServer(indigo.kStateImageSel.SensorOn)
+        else:
+            device.updateStateImageOnServer(indigo.kStateImageSel.SensorTripped)
 
     def update_lock_device(self, device):
         try:
