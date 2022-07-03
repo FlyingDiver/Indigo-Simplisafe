@@ -11,6 +11,12 @@
             </Field>
         </ConfigUI>
         <States>
+            <State id="homekit_state" defaultValue="">
+                <ValueType>Number</ValueType>
+                <TriggerLabel>HomeKit State</TriggerLabel>
+                <ControlPageLabel>HomeKit State</ControlPageLabel>
+            </State>
+
             <State id="system_address" defaultValue="">
                 <ValueType>String</ValueType>
                 <TriggerLabel>System Address</TriggerLabel>

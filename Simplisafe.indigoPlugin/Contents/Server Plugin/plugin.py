@@ -38,6 +38,27 @@ from simplipy.websocket import (
     WebsocketEvent,
 )
 
+# Homekit Support
+
+HK_ALARM_STAY_ARMED = 0
+HK_ALARM_AWAY_ARMED = 1
+HK_ALARM_NIGHT_ARMED = 2
+HK_ALARM_DISARMED = 3
+HK_ALARM_TRIGGERED = 4
+HOMEKIT_STATE = {
+    simplipy.system.SystemStates.ALARM:         HK_ALARM_TRIGGERED,
+    simplipy.system.SystemStates.ALARM_COUNT:   HK_ALARM_TRIGGERED,
+    simplipy.system.SystemStates.AWAY:          HK_ALARM_AWAY_ARMED,
+    simplipy.system.SystemStates.AWAY_COUNT:    HK_ALARM_AWAY_ARMED,
+    simplipy.system.SystemStates.ENTRY_DELAY:   HK_ALARM_AWAY_ARMED,
+    simplipy.system.SystemStates.ERROR:         HK_ALARM_DISARMED,
+    simplipy.system.SystemStates.HOME:          HK_ALARM_STAY_ARMED,
+    simplipy.system.SystemStates.HOME_COUNT:    HK_ALARM_STAY_ARMED,
+    simplipy.system.SystemStates.OFF:           HK_ALARM_DISARMED,
+    simplipy.system.SystemStates.TEST:          HK_ALARM_DISARMED,
+    simplipy.system.SystemStates.UNKNOWN:       HK_ALARM_DISARMED,
+}
+
 class Plugin(indigo.PluginBase):
 
     def __init__(self, pluginId, pluginDisplayName, pluginVersion, pluginPrefs):
@@ -607,6 +628,7 @@ class Plugin(indigo.PluginBase):
             return
         self.logger.debug(f"{device.name}: doing update for {system.address}")
         update_list = [
+            {'key': "homekit_state", 'value': HOMEKIT_STATE[system.state]},
             {'key': "system_address", 'value': system.address},
             {'key': "connection_type", 'value': system.connection_type},
             {'key': "system_serial", 'value': system.serial},
